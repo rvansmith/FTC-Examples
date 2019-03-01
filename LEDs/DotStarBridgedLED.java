@@ -49,6 +49,13 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
      * */
     public DotStarBridgedLED.Pixel[] pixels;
 
+    /**
+     * Array representing the individual pixel groups in the LED strip as set.
+     *
+     * Sizing can be set using {@link Parameters#length} during initialization.
+     * */
+    private DotStarBridgedLED.Pixel[] setPixels;
+
 
     //----------------------------------------------------------------------------------------------
     // Construction
@@ -67,9 +74,12 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
 
         // Create array for pixels.
         this.pixels = new DotStarBridgedLED.Pixel[params.length];
+        this.setPixels = new DotStarBridgedLED.Pixel[params.length];
 
         for (int i = 0; i < params.length; i++) {
             pixels[i] = new DotStarBridgedLED.Pixel(0, 0, 0);
+            // Set to invalid value so first time through it will get udpated.
+            setPixels[i] = new DotStarBridgedLED.Pixel(-1, -1, -1);
         }
 
         // We ask for an initial callback here; that will eventually call internalInitialize().
@@ -154,12 +164,15 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
         }
         else if (oldLength > length) {
             this.pixels = Arrays.copyOfRange(this.pixels, 0, length);
+            this.setPixels = Arrays.copyOfRange(this.setPixels, 0, length);
         }
         else {
             this.pixels = Arrays.copyOf(this.pixels, length);
+            this.setPixels = Arrays.copyOf(this.setPixels, length);
 
             for (int i = oldLength; i < length; i++) {
-                this.pixels[i] = new DotStarBridgedLED.Pixel(0, 0, 0);
+          		this.pixels[i] = new DotStarBridgedLED.Pixel(0, 0, 0);
+           		this.setPixels[i] = new DotStarBridgedLED.Pixel(-1, -1, -1);
             }
         }
     }
@@ -233,6 +246,7 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
      * @see DotStarBridgedLED#setMaxOutputAmps(double)
      * */
     public void update() {
+        boolean updatePixels = false;
         // Number of bytes necessary to write out the pixels, including header and end frames.
         int bufferLength =
                 4                               // Header frame: 1 word of zeroes
@@ -250,6 +264,10 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
 
         // Iterate the pixels to learn the total current drawn and collect the colors in order.
         for (int i = 0; i < pixels.length; i++) {
+            if(pixels[i] != setPixels[i]) {
+                setPixels[i] = pixels[i];
+                updatePixels = true;
+            }
             Pixel pixel = pixels[i];
             current += pixel.current();
 
@@ -259,45 +277,49 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
             colors[i * 3 + 2] = pixel.red;
         }
 
-        // Ensure the total current will not exceed our theoretical maximum.
-        if (current > parameters.maxOutputAmps) {
-            double scale = parameters.maxOutputAmps / current;
+        // Only perform the write if one or more pixels changed.  Otherwise
+        // the pixels should already by set properly.
+        if(updatePixels) {
+            // Ensure the total current will not exceed our theoretical maximum.
+            if (current > parameters.maxOutputAmps) {
+                double scale = parameters.maxOutputAmps / current;
 
-            // Scale (reduce) each color value (0 - 255) and round down.
-            for (int i = 0; i < colors.length; i++) {
-                colors[i] = (int) Math.floor(colors[i] * scale);
+                // Scale (reduce) each color value (0 - 255) and round down.
+                for (int i = 0; i < colors.length; i++) {
+                    colors[i] = (int) Math.floor(colors[i] * scale);
+                }
             }
+
+            // Skip the first four bytes (header frame).
+            for (int i = 0, j = 0; i < bufferLength; i++) {
+
+                if (i < 4) {
+                    buffer[i] = 0;
+                    continue;
+                }
+
+                // NOTE: Writing zeroes instead of 0xff reduces odd end pixels if not
+                // using the entire strip. This isn't to spec, however.
+                // If we have written all of our colors, fill in the end frame with 0x00.
+                if (j >= colors.length) {
+                    buffer[i] = (byte) 0x00;
+                    continue;
+                }
+
+                // We still have colors to write, so write {0xff, blue, green, red}.
+                if (i % 4 == 0) {
+                    buffer[i] = (byte) 0xff;
+                    continue;
+                }
+
+                // As we write colors, progress along the colors array.
+                buffer[i] = (byte) colors[j];
+                j++;
+            }
+
+            // Write to the LED strip.
+            write(buffer);
         }
-
-        // Skip the first four bytes (header frame).
-        for (int i = 0, j = 0; i < bufferLength; i++) {
-
-            if (i < 4) {
-                buffer[i] = 0;
-                continue;
-            }
-
-            // NOTE: Writing zeroes instead of 0xff reduces odd end pixels if not
-            // using the entire strip. This isn't to spec, however.
-            // If we have written all of our colors, fill in the end frame with 0x00.
-            if (j >= colors.length) {
-                buffer[i] = (byte) 0x00;
-                continue;
-            }
-
-            // We still have colors to write, so write {0xff, blue, green, red}.
-            if (i % 4 == 0) {
-                buffer[i] = (byte) 0xff;
-                continue;
-            }
-
-            // As we write colors, progress along the colors array.
-            buffer[i] = (byte) colors[j];
-            j++;
-        }
-
-        // Write to the LED strip.
-        write(buffer);
     }
 
 
@@ -525,6 +547,28 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
             this.green = bound(Color.green(color));
         }
 
+
+        // Overriding equals() to compare two pixels
+        @Override
+        public boolean equals(Object o) {
+
+            // If the object is compared with itself then return true
+            if (o == this) {
+                return true;
+            }
+
+        /* Check if o is an instance of Pixel or not
+          "null instanceof [type]" also returns false */
+            if (!(o instanceof Pixel)) {
+                return false;
+            }
+
+            // typecast o to Pixel so that we can compare data members
+            Pixel c = (Pixel) o;
+
+            // Compare the data members and return accordingly
+            return red == c.red && green == c.green && blue == c.blue;
+        }
 
         //------------------------------------------------------------------------------------------
         // Utility
