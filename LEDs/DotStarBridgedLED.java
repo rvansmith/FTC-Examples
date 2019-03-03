@@ -264,8 +264,8 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
 
         // Iterate the pixels to learn the total current drawn and collect the colors in order.
         for (int i = 0; i < pixels.length; i++) {
-            if(pixels[i] != setPixels[i]) {
-                setPixels[i] = pixels[i];
+            if(!pixels[i].equals(setPixels[i])) {
+                setPixels[i].copy(pixels[i]);
                 updatePixels = true;
             }
             Pixel pixel = pixels[i];
@@ -547,11 +547,24 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
             this.green = bound(Color.green(color));
         }
 
+        /**
+         * Copies a pixel to another.
+         * @param c The pixel to copy.
+         */
+        public void copy(Pixel c) {
+            red = c.red;
+            green = c.green;
+            blue = c.blue;
+        }
 
-        // Overriding equals() to compare two pixels
+        /**
+         * Overriding equals() to compare two pixels
+         *
+         * @param o Object to compare to this
+         * @return true if pixels are equal, false if different
+         */
         @Override
         public boolean equals(Object o) {
-
             // If the object is compared with itself then return true
             if (o == this) {
                 return true;
@@ -567,7 +580,7 @@ public class DotStarBridgedLED extends I2cDeviceSynchDeviceWithParameters<I2cDev
             Pixel c = (Pixel) o;
 
             // Compare the data members and return accordingly
-            return red == c.red && green == c.green && blue == c.blue;
+            return ((red == c.red) && (green == c.green) && (blue == c.blue));
         }
 
         //------------------------------------------------------------------------------------------

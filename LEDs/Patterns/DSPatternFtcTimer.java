@@ -28,7 +28,7 @@ public class DSPatternFtcTimer extends DotStarPattern implements IDotStarPattern
     	super(leds);
         // Set up the timer we'll use for visual effects.
         timer = new ElapsedTime();
-        numColors = 3;
+        numColors = 4;
         targetTime = 0.0;
         patternDelay = 120000.0;
         colors.add(0, Color.GREEN);
