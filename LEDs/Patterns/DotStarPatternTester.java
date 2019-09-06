@@ -29,6 +29,7 @@ public class DotStarPatternTester extends OpMode {
     IDotStarPattern twinkle;
     IDotStarPattern indicator;
     IDotStarPattern ledDisplay;
+    IDotStarPattern workshop;
     float[] redHsv = new float[]{0f, 0f, 0f};
     float[] yellowHsv = new float[]{0f, 0f, 0f};
     float[] greenHsv = new float[]{0f, 0f, 0f};
@@ -73,6 +74,9 @@ public class DotStarPatternTester extends OpMode {
         indicatorColors.add(1, Color.GREEN);
         indicatorColors.add(2, Color.RED);
         indicator.setPatternColors(indicatorColors);
+
+        // This creates a default workshop pattern
+        workshop = new DSPatternWorkshop(leds);
     }
 
     public void start() {
@@ -95,6 +99,8 @@ public class DotStarPatternTester extends OpMode {
                 ledDisplay = rainbow;
             } else if (gamepad1.right_bumper) {
                 ledDisplay = rainbowShift;
+            } else if (gamepad1.dpad_up) {
+                ledDisplay = workshop;
             }
 
             // The indicator pattern is the only one in this tester that
